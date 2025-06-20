@@ -8,20 +8,18 @@ import {
   Typography,
   Paper,
   Box,
-  Alert
+  Alert,
+  ListItemIcon
 } from '@mui/material';
-import { Delete as DeleteIcon, PlayArrow, Pause } from '@mui/icons-material';
-import { Howl } from 'howler';
+import { Delete as DeleteIcon, PlayArrow, Pause, MusicNote } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-
-let sound = null;
+import { useAudio } from '../contexts/AudioContext';
 
 function Playlist() {
   const [files, setFiles] = useState([]);
-  const [current, setCurrent] = useState('');
-  const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState('');
   const { token } = useAuth();
+  const { currentTrack, isPlaying, play } = useAudio();
 
   const fetchFiles = async () => {
     try {
@@ -46,32 +44,6 @@ function Playlist() {
     fetchFiles();
   }, [token]);
 
-  const playSong = (file) => {
-    if (sound) {
-      sound.stop();
-    }
-
-    if (current === file && isPlaying) {
-      setIsPlaying(false);
-      setCurrent('');
-      return;
-    }
-
-    sound = new Howl({
-      src: [`http://localhost:5000/uploads/${file}`],
-      html5: true,
-      onplay: () => setIsPlaying(true),
-      onpause: () => setIsPlaying(false),
-      onend: () => {
-        setIsPlaying(false);
-        setCurrent('');
-      }
-    });
-
-    sound.play();
-    setCurrent(file);
-  };
-
   const deleteFile = async (filename) => {
     if (window.confirm('Sei sicuro di voler eliminare questo file?')) {
       try {
@@ -84,11 +56,6 @@ function Playlist() {
 
         if (response.ok) {
           fetchFiles(); // Ricarica la lista
-          if (current === filename) {
-            if (sound) sound.stop();
-            setCurrent('');
-            setIsPlaying(false);
-          }
         } else {
           alert('Errore durante l\'eliminazione del file');
         }
@@ -96,6 +63,18 @@ function Playlist() {
         alert('Errore di connessione');
       }
     }
+  };
+
+  const getDisplayName = (filename) => {
+    // Rimuove il prefisso user_id_ dal nome del file
+    return filename.replace(/^\d+_/, '');
+  };
+
+  const getTrackStatus = (filename) => {
+    if (currentTrack === filename) {
+      return isPlaying ? '🎵 In riproduzione' : '⏸️ In pausa';
+    }
+    return '';
   };
 
   if (error) {
@@ -120,13 +99,28 @@ function Playlist() {
             {files.map((file, index) => (
               <ListItemButton
                 key={file}
-                onClick={() => playSong(file)}
-                selected={current === file}
+                onClick={() => play(file)}
+                selected={currentTrack === file}
                 divider={index < files.length - 1}
+                sx={{
+                  '&.Mui-selected': {
+                    backgroundColor: 'primary.light',
+                    '&:hover': {
+                      backgroundColor: 'primary.light',
+                    },
+                  },
+                }}
               >
+                <ListItemIcon>
+                  {currentTrack === file ? (
+                    isPlaying ? <Pause color="primary" /> : <PlayArrow color="primary" />
+                  ) : (
+                    <MusicNote />
+                  )}
+                </ListItemIcon>
                 <ListItemText
-                  primary={file.replace(/^\d+_/, '')} // Rimuove il prefisso user_id
-                  secondary={current === file ? (isPlaying ? '🎵 In riproduzione' : '⏸️ In pausa') : ''}
+                  primary={getDisplayName(file)}
+                  secondary={getTrackStatus(file)}
                 />
                 <ListItemSecondaryAction>
                   <IconButton
@@ -136,6 +130,7 @@ function Playlist() {
                       deleteFile(file);
                     }}
                     color="error"
+                    size="small"
                   >
                     <DeleteIcon />
                   </IconButton>

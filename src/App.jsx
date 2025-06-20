@@ -19,6 +19,7 @@ import PlayerControls from './components/PlayerControls';
 import LoginForm from './components/LoginForm';
 import UserMenu from './components/UserMenu';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AudioProvider } from './contexts/AudioContext';
 import { getTheme } from './theme';
 
 function AppContent() {
@@ -68,16 +69,16 @@ function AppContent() {
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="md" sx={{ mt: 4 }}>
+      <Container maxWidth="md" sx={{ mt: 4, pb: 4 }}>
         {user ? (
-          <>
+          <AudioProvider>
             <Typography variant="h4" gutterBottom>
               Benvenuto, {user.username}! 👋
             </Typography>
             <Upload />
             <Playlist />
             <PlayerControls />
-          </>
+          </AudioProvider>
         ) : (
           <Box textAlign="center" sx={{ mt: 8 }}>
             <Typography variant="h4" gutterBottom>

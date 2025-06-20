@@ -3,25 +3,34 @@ import {
   List,
   ListItemButton,
   ListItemText,
-  ListItemSecondaryAction,
-  IconButton,
   Typography,
   Paper,
   Box,
   Alert,
-  ListItemIcon
+  ListItemIcon,
+  Chip,
+  Stack,
+  CircularProgress
 } from '@mui/material';
-import { Delete as DeleteIcon, PlayArrow, Pause, MusicNote } from '@mui/icons-material';
+import { 
+  PlayArrow, 
+  Pause, 
+  MusicNote
+} from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useAudio } from '../contexts/AudioContext';
+import { useNotifications } from '../contexts/NotificationContext';
 
 function Playlist() {
   const [files, setFiles] = useState([]);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const { token } = useAuth();
   const { currentTrack, isPlaying, play } = useAudio();
+  const { addNotification } = useNotifications();
 
   const fetchFiles = async () => {
+    setLoading(true);
     try {
       const response = await fetch('http://localhost:5000/files', {
         headers: {
@@ -37,110 +46,125 @@ function Playlist() {
       }
     } catch (err) {
       setError('Errore di connessione');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchFiles();
+    if (token) {
+      fetchFiles();
+    }
   }, [token]);
 
+  const handlePlayTrack = (filename) => {
+    play(filename);
+  };
+
   const deleteFile = async (filename) => {
-    if (window.confirm('Sei sicuro di voler eliminare questo file?')) {
-      try {
-        const response = await fetch(`http://localhost:5000/delete/${filename}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (response.ok) {
-          fetchFiles(); // Ricarica la lista
-        } else {
-          alert('Errore durante l\'eliminazione del file');
+    try {
+      const response = await fetch(`http://localhost:5000/delete/${filename}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
-      } catch (err) {
-        alert('Errore di connessione');
+      });
+      
+      if (response.ok) {
+        fetchFiles();
+        addNotification('File eliminato', 'success', `${filename} è stato rimosso con successo`);
+      } else {
+        const errorData = await response.json();
+        addNotification('Errore eliminazione', 'error', errorData.error || 'Errore durante l\'eliminazione');
       }
+    } catch (err) {
+      addNotification('Errore di rete', 'error', 'Impossibile connettersi al server');
     }
-  };
-
-  const getDisplayName = (filename) => {
-    // Rimuove il prefisso user_id_ dal nome del file
-    return filename.replace(/^\d+_/, '');
-  };
-
-  const getTrackStatus = (filename) => {
-    if (currentTrack === filename) {
-      return isPlaying ? '🎵 In riproduzione' : '⏸️ In pausa';
-    }
-    return '';
   };
 
   if (error) {
-    return <Alert severity="error">{error}</Alert>;
+    return (
+      <Paper sx={{ p: 2 }}>
+        <Alert severity="error">{error}</Alert>
+      </Paper>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" py={4}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   return (
-    <Box sx={{ mb: 3 }}>
-      <Typography variant="h5" gutterBottom>
-        La tua Playlist 🎵
-      </Typography>
-      
+    <Paper sx={{ p: 2 }}>
+      <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+        <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          Brani ({files.length})
+        </Typography>
+        
+        <Chip 
+          label={`${files.length} brani`} 
+          color="primary" 
+          variant="outlined"
+          size="small"
+        />
+      </Stack>
+
       {files.length === 0 ? (
-        <Paper sx={{ p: 3, textAlign: 'center' }}>
-          <Typography color="text.secondary">
-            Nessun file MP3 trovato. Carica i tuoi brani preferiti!
+        <Box sx={{ textAlign: 'center', py: 4 }}>
+          <Typography variant="h6" color="text.secondary">
+            Nessun file presente
           </Typography>
-        </Paper>
+          <Typography variant="body2" color="text.secondary">
+            Carica i tuoi primi brani musicali per iniziare!
+          </Typography>
+        </Box>
       ) : (
-        <Paper>
-          <List>
-            {files.map((file, index) => (
-              <ListItemButton
-                key={file}
-                onClick={() => play(file)}
-                selected={currentTrack === file}
-                divider={index < files.length - 1}
-                sx={{
-                  '&.Mui-selected': {
-                    backgroundColor: 'primary.light',
-                    '&:hover': {
-                      backgroundColor: 'primary.light',
-                    },
-                  },
-                }}
-              >
-                <ListItemIcon>
-                  {currentTrack === file ? (
-                    isPlaying ? <Pause color="primary" /> : <PlayArrow color="primary" />
-                  ) : (
-                    <MusicNote />
-                  )}
-                </ListItemIcon>
-                <ListItemText
-                  primary={getDisplayName(file)}
-                  secondary={getTrackStatus(file)}
-                />
-                <ListItemSecondaryAction>
-                  <IconButton
-                    edge="end"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteFile(file);
-                    }}
-                    color="error"
-                    size="small"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </ListItemSecondaryAction>
-              </ListItemButton>
-            ))}
-          </List>
-        </Paper>
+        <List sx={{ maxHeight: 400, overflow: 'auto' }}>
+          {files.map((file) => (
+            <ListItemButton
+              key={file.filename}
+              selected={currentTrack === file.filename}
+              onClick={() => handlePlayTrack(file.filename)}
+              sx={{
+                borderRadius: 1,
+                mb: 1,
+                backgroundColor: currentTrack === file.filename ? 'action.selected' : 'transparent',
+                '&:hover': {
+                  backgroundColor: 'action.hover',
+                },
+              }}
+            >
+              <ListItemIcon>
+                {currentTrack === file.filename && isPlaying ? (
+                  <Pause color="primary" />
+                ) : (
+                  <PlayArrow color={currentTrack === file.filename ? "primary" : "action"} />
+                )}
+              </ListItemIcon>
+              <ListItemIcon>
+                <MusicNote />
+              </ListItemIcon>
+              <ListItemText
+                primary={
+                  <Typography noWrap>
+                    {file.originalName || file.filename}
+                  </Typography>
+                }
+                secondary={
+                  <Typography variant="caption" color="text.secondary">
+                    {new Date(file.uploadDate).toLocaleDateString('it-IT')}
+                  </Typography>
+                }
+              />
+            </ListItemButton>
+          ))}
+        </List>
       )}
-    </Box>
+    </Paper>
   );
 }
 
